@@ -48,7 +48,8 @@ class MainWindow(QtWidgets.QWidget):
 
         self.file_formats = {
             "PNG (*.png)": self.save_as_png,
-            "PKS (*.pks)": self.save_as_pks
+            "PKS (*.pks)": self.save_as_pks,
+            "RAW (*.raw)": self.save_raw
         }
 
         self.trace_widgets_list: list[TraceWidget] = []
@@ -138,7 +139,7 @@ class MainWindow(QtWidgets.QWidget):
 
     @pyqtSlot()
     def save_seismograms(self):
-        files_types = "PNG (*.png);;PKS (*.pks)"
+        files_types = "PNG (*.png);;PKS (*.pks);; RAW (*.raw)"
         dialog = ChkBxFileDialog(chkBxTitle="Сохранить как последовательность", filter=files_types)
 
         for i in range(len(self.trace_widgets_list)):
@@ -150,6 +151,14 @@ class MainWindow(QtWidgets.QWidget):
                     break
                 else:
                     self.file_formats[dialog.selectedNameFilter()](self.trace_widgets_list[i], dialog, False)
+
+    def save_raw(self, trace, dlg, is_long_name):
+        if trace.ui.apply_operation_chkbox.isChecked():
+            file_path = f"{self.get_file_path(trace, dlg, is_long_name)}.raw"
+            raw_data = trace.get_raw()
+            with open(file_path, 'w') as file:
+                for item in raw_data:
+                    file.write(item + '\n')
 
     def save_as_pks(self, trace, dlg, is_long_name):
         if trace.ui.apply_operation_chkbox.isChecked():

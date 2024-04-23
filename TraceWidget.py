@@ -214,6 +214,18 @@ class TraceWidget(QtWidgets.QWidget):
         for slider in self.ui_sliders:
             slider.valueChanged.disconnect()
 
+    def get_raw(self):
+        result = []
+        result.append("P")
+        result.extend(
+            [f"{self._graphic_index_from_model(index)} {self.prediction[index, 0]} {self.prediction[index, 2]}" for
+             index in self.p_der_indexes])
+        result.append("S")
+        result.extend(
+            [f"{self._graphic_index_from_model(index)} {self.prediction[index, 1]} {self.prediction[index, 2]}" for
+             index in self.s_der_indexes])
+        return result
+
     def get_lines_as_pks(self):
         log_file = []
         for elem in chain(self.p_vertical_lines, self.s_vertical_lines):

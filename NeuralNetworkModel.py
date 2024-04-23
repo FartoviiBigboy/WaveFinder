@@ -31,6 +31,7 @@ class NeuralNetworkModel:
 
     def __init__(self):
         self.device_for_calculation = "/GPU:0" if (len(tf.config.list_physical_devices('GPU')) > 0) else "/device:CPU:0"
+        print(self.device_for_calculation)
         self.model = self.__initialize_model()
         self.__load_model_weights()
 
