@@ -26,7 +26,7 @@ class MaxABSScaler(keras.layers.Layer):
 class NeuralNetworkModel:
     WAVE_LENGTH = 400
     NUMBER_OF_TRACES = 3
-    DELTA_X = 40
+    DELTA_X = 20
     BATCH_SIZE = 32
 
     def __init__(self):
@@ -39,8 +39,16 @@ class NeuralNetworkModel:
         self.model.load_weights("resources/mymodel_3_15.h5")
 
     def get_prediction(self, seismogram: Seismogram, progress_bar):
+
+        traces_copy = np.array(
+            [
+                np.concatenate((np.zeros(200), seismogram.traces[0], np.zeros(200))),
+                np.concatenate((np.zeros(200), seismogram.traces[1], np.zeros(200))),
+                np.concatenate((np.zeros(200), seismogram.traces[2], np.zeros(200))),
+            ]
+        )
         converted_traces = self.__horizontal_2D_sliding_window(
-            seismogram.traces,
+            traces_copy,
             (self.NUMBER_OF_TRACES, self.WAVE_LENGTH),
             self.DELTA_X)
         converted_traces = np.transpose(converted_traces, (0, 2, 1))

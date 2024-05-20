@@ -189,8 +189,7 @@ class TraceWidget(QtWidgets.QWidget):
         sender["lines"].clear()
 
     def _graphic_index_from_model(self, index):
-        return int(NeuralNetworkModel.WAVE_LENGTH / 2) + \
-            int(NeuralNetworkModel.DELTA_X * index)
+        return int(NeuralNetworkModel.DELTA_X * index)
 
     def reset_prediction(self):
         for trace in chain(self.p_vertical_lines, self.s_vertical_lines):
@@ -309,7 +308,7 @@ class TraceWidget(QtWidgets.QWidget):
 
     def _model_index_from_graphic(self, index):
         return int(
-            (index - int(NeuralNetworkModel.WAVE_LENGTH / 2)) / NeuralNetworkModel.DELTA_X
+            (index) / NeuralNetworkModel.DELTA_X
         )
 
     def _graphic_index_from_position(self, x_position):
