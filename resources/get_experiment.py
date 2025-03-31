@@ -4,10 +4,14 @@ import re
 import glob
 
 import numpy as np
+import obspy
 from natsort import os_sorted
 from concurrent.futures import ProcessPoolExecutor
 import matplotlib.pyplot as plt
 
+from Seismogram import Seismogram
+
+list_of_seismograms = []
 
 def compute_score(args):
     i, j, list_of_map_pred_value, list_of_map_true_value = args
@@ -29,7 +33,8 @@ def compute_score(args):
         precision = TP / (TP + FP)
         recall = TP / (TP + FN)
         beta = 1
-        f1_score = (1 + beta ** 2) * precision * recall / (precision * beta ** 2 + recall)
+        if not ((precision + recall) == 0):
+            f1_score = (1 + beta ** 2) * precision * recall / (precision * beta ** 2 + recall)
 
     if not ((TP + FN) == 0 or (TN + FP) == 0):
         g_mean = math.sqrt(TP / (TP + FN)) * math.sqrt(TN / (TN + FP))
@@ -46,13 +51,26 @@ def compute_score(args):
 def get_matrix(dir_name: str):
     tmp_dir = dir_name if dir_name[-1] == '\\' else dir_name + '\\'
     true_dir = tmp_dir + 'true_40\\'
-    pred_dir = tmp_dir + 'pred_40_notall\\'
+    pred_dir = tmp_dir + 'pred_40_0.5_ex\\'
+    seis_dir = tmp_dir + 'records\\'
+    seis_filter = 0.5, 'high'
     list_of_true_files = os_sorted(filter(os.path.isfile, glob.glob(true_dir + '*')))
     list_of_pred_files = os_sorted(filter(os.path.isfile, glob.glob(pred_dir + '*')))
+    list_of_records = os_sorted(filter(os.path.isfile, glob.glob(seis_dir + '*')))
     list_of_map_true_p = []
     list_of_map_pred_p = []
     list_of_map_true_s = []
     list_of_map_pred_s = []
+    list_of_lists_pred_preds = []
+    global list_of_seismograms
+
+    for i in range(len(list_of_records)):
+        st = obspy.read(list_of_records[i])
+        sorted_list = sorted(st, key=lambda x: (x.stats.station, x.stats.channel))
+        sorted_list[::3], sorted_list[1::3] = sorted_list[1::3], sorted_list[::3]
+        seis = Seismogram(sorted_list[0:0 + 3], list_of_records[i])
+        seis.apply_filter(2, seis_filter[0], seis_filter[1])
+        list_of_seismograms.append(seis)
 
     for i in range(len(list_of_true_files)):
         with open(list_of_true_files[i], 'r') as file:
@@ -75,29 +93,36 @@ def get_matrix(dir_name: str):
 
     for i in range(len(list_of_pred_files)):
         with open(list_of_pred_files[i], 'r') as file:
-            flag = True
+            flag = 0
             tmp_map_pred_p = {}
             tmp_map_pred_s = {}
+            tmp_list_pred_preds = []
             lines = file.readlines()
             for line in lines:
                 if line.rstrip('\n') == 'P':
                     continue
                 elif line.rstrip('\n') == 'S':
-                    flag = False
+                    flag = 1
                     continue
-                if flag:
+                elif line.rstrip('\n') == 'raw':
+                    flag = 2
+                    continue
+                if flag == 0:
                     tmp_map_pred_p[int(line.split(' ')[0])] = [float(line.split(' ')[1]),
                                                                float((line.split(' ')[2]).rstrip('\n'))]
-                else:
+                elif flag == 1:
                     tmp_map_pred_s[int(line.split(' ')[0])] = [float(line.split(' ')[1]),
                                                                float((line.split(' ')[2]).rstrip('\n'))]
+                elif flag == 2:
+                    tmp_list_pred_preds.append((float(line.split(' ')[0]), float(line.split(' ')[1]), float((line.split(' ')[2]).rstrip('\n'))))
         list_of_map_pred_p.append(tmp_map_pred_p)
         list_of_map_pred_s.append(tmp_map_pred_s)
+        list_of_lists_pred_preds.append(tmp_list_pred_preds)
 
     args_list_p = [(i, j, list_of_map_pred_p, list_of_map_true_p) for i in range(101) for j in range(101)]
     args_list_s = [(i, j, list_of_map_pred_s, list_of_map_true_s) for i in range(101) for j in range(101)]
 
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(os.cpu_count()) as executor:
         results_p = executor.map(compute_score, args_list_p)
         results_s = executor.map(compute_score, args_list_s)
 
@@ -133,10 +158,10 @@ def get_matrix(dir_name: str):
     # plt.colorbar()
     # plt.savefig('p_4_p.png', dpi=700)
     # plt.clf()
-    # plt.imshow(mcc_score_p, cmap='coolwarm')
-    # plt.colorbar()
-    # plt.savefig('mcc_score_p.png', dpi=700)
-    # plt.clf()
+    plt.imshow(mcc_score_p, cmap='coolwarm')
+    plt.colorbar()
+    plt.savefig('mcc_score_p.png', dpi=700)
+    plt.clf()
     #
     # plt.imshow(f1_s, cmap='coolwarm')
     # plt.colorbar()
@@ -150,10 +175,10 @@ def get_matrix(dir_name: str):
     # plt.colorbar()
     # plt.savefig('p_4_s.png', dpi=700)
     # plt.clf()
-    # plt.imshow(mcc_score_s, cmap='coolwarm')
-    # plt.colorbar()
-    # plt.savefig('mcc_score_s.png', dpi=700)
-    # plt.clf()
+    plt.imshow(mcc_score_s, cmap='coolwarm')
+    plt.colorbar()
+    plt.savefig('mcc_score_s.png', dpi=700)
+    plt.clf()
     # plt.show()
 
 

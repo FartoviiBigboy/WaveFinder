@@ -1,10 +1,13 @@
 import contextlib
 import os
 import datetime
+import threading
 from itertools import chain
 
 from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtCore import pyqtSlot
+from tensorflow.python.ops.gen_array_ops import deep_copy
+
 from Seismogram import Seismogram
 
 from resources.ui_TraceWidget import Ui_TraceWidget
@@ -12,12 +15,14 @@ from NeuralNetworkModel import NeuralNetworkModel
 
 from TriadePlots import TriadePlots
 from TriadeLines import VerticalTriadeLine, PVerticalTriadeLine, SVerticalTriadeLine
+from PredictionFilter import PredictionFilter
 
 
 class TraceWidget(QtWidgets.QWidget):
     def __init__(self, seismogram: Seismogram, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
 
+        self.update_mutex = threading.Lock()
         self.selected_item = None
 
         self.prediction = None
@@ -135,6 +140,7 @@ class TraceWidget(QtWidgets.QWidget):
             "val": self.ui.s_sensitivity,
             "noise": self.ui.noise_s_sensitivity,
             "pred": self.prediction[:, 1],
+            "pred_orig": self.prediction[:, 1],
             "der": self.s_der_indexes,
             "filt": self.s_filtered_indexes,
             "lines": self.s_vertical_lines,
@@ -152,14 +158,21 @@ class TraceWidget(QtWidgets.QWidget):
         self.ui.p_sensitivity.setValue(1)
         self.ui.s_sensitivity.setValue(1)
 
+    # TODO update filtering
     def _update_values(self, value):
-        sender = self.object_to_types[self.sender()]
-        sender["filt"].clear()
-        first_value, second_value = self._get_thresholds(sender, self.sender(), value)
-        for index in sender["der"]:
-            if sender["pred"][index] > first_value and self.prediction[index, 2] < second_value:
-                sender["filt"].append(index)
-        self._show_prediction(sender)
+        with self.update_mutex:
+            sender = self.object_to_types[self.sender()]
+            sender["filt"].clear()
+            first_value, second_value = self._get_thresholds(sender, self.sender(), value)
+            for index in sender["der"]:
+                if sender["pred"][index] > first_value and self.prediction[index, 2] < second_value:
+                    sender["filt"].append(index)
+
+            if sender["name"] == "P":
+                self.s_types["pred"] = []
+                self.s_types["pred"] = PredictionFilter.s_wave_correction(self.seismogram, sender["filt"], self.prediction)[:, 1]
+            print(sender["name"])
+            self._show_prediction(sender)
 
     def _update_labels(self, value):
         label = self.ui_label_sliders[self.sender()]
@@ -223,6 +236,10 @@ class TraceWidget(QtWidgets.QWidget):
         result.extend(
             [f"{self._graphic_index_from_model(index)} {self.prediction[index, 1]} {self.prediction[index, 2]}" for
              index in self.s_der_indexes])
+        result.append("raw")
+        result.extend(
+            [f"{self.prediction[index, 0]} {self.prediction[index, 1]} {self.prediction[index, 2]}" for
+             index in range(self.prediction.shape[0])])
         return result
 
     def get_lines_as_pks(self):

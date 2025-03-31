@@ -1,5 +1,10 @@
+from itertools import accumulate
+
 import numpy as np
+import scipy
 import tensorflow as tf
+from PyQt6.QtWidgets import QProgressBar
+import nptyping as npt
 
 from tensorflow import keras
 from keras import regularizers
@@ -24,10 +29,13 @@ class MaxABSScaler(keras.layers.Layer):
 
 
 class NeuralNetworkModel:
-    WAVE_LENGTH = 400
-    NUMBER_OF_TRACES = 3
-    DELTA_X = 20
-    BATCH_SIZE = 32
+    WAVE_LENGTH: int = 400
+    NUMBER_OF_TRACES: int = 3
+    DELTA_X: int = 40
+    BATCH_SIZE: int = 32
+
+    EPS: float = 0.000001
+    MAX_WINDOWS: int = 50
 
     def __init__(self):
         self.device_for_calculation = "/GPU:0" if (len(tf.config.list_physical_devices('GPU')) > 0) else "/device:CPU:0"
@@ -38,13 +46,12 @@ class NeuralNetworkModel:
     def __load_model_weights(self):
         self.model.load_weights("resources/mymodel_3_15.h5")
 
-    def get_prediction(self, seismogram: Seismogram, progress_bar):
-
+    def get_prediction(self, seismogram: Seismogram, progress_bar: QProgressBar) -> tuple[npt.NDArray[npt.Shape["*, 3"], npt.Float32], list[int], list[int]]:
         traces_copy = np.array(
             [
-                np.concatenate((np.zeros(200), seismogram.traces[0], np.zeros(200))),
-                np.concatenate((np.zeros(200), seismogram.traces[1], np.zeros(200))),
-                np.concatenate((np.zeros(200), seismogram.traces[2], np.zeros(200))),
+                np.concatenate((np.zeros(int(self.WAVE_LENGTH / 2)), seismogram.traces[0], np.zeros(int(self.WAVE_LENGTH / 2)))),
+                np.concatenate((np.zeros(int(self.WAVE_LENGTH / 2)), seismogram.traces[1], np.zeros(int(self.WAVE_LENGTH / 2)))),
+                np.concatenate((np.zeros(int(self.WAVE_LENGTH / 2)), seismogram.traces[2], np.zeros(int(self.WAVE_LENGTH / 2)))),
             ]
         )
         converted_traces = self.__horizontal_2D_sliding_window(
@@ -54,13 +61,24 @@ class NeuralNetworkModel:
         converted_traces = np.transpose(converted_traces, (0, 2, 1))
         callbacks = CustomCallback(progress_bar, converted_traces.shape[0])
 
-        predicted = self.model.predict(converted_traces[:], batch_size=NeuralNetworkModel.BATCH_SIZE,
-                                       callbacks=[callbacks], verbose=0)
+        predicted: npt.NDArray[npt.Shape["*, 3"], npt.Float32] = self.model.predict(
+            converted_traces[:],
+            batch_size=NeuralNetworkModel.BATCH_SIZE,
+            callbacks=[callbacks],
+            verbose=0
+        )
+        print(predicted.shape)
+        if not isinstance(predicted, npt.NDArray[npt.Shape["*, 3"], npt.Float32]): # Error is OK, pycharm analysis error
+            raise TypeError("predicted is not a NDArray(-1, 3)")
+
         p_der_indexes = self.__get_maximums(predicted[:, 0])
         s_der_indexes = self.__get_maximums(predicted[:, 1])
+
+        # predicted = self.__s_wave_correction(seismogram, p_der_indexes, predicted)
+
         return predicted, p_der_indexes, s_der_indexes
 
-    def __initialize_model(self):
+    def __initialize_model(self) -> tf.keras.models.Model:
         with tf.device(self.device_for_calculation):
             output_size = 3
             input_size = (400, 3)
@@ -160,6 +178,91 @@ class NeuralNetworkModel:
         return [i
                 for i in range(1, len(array) - 1)
                 if (array[i] - array[i - 1] > 0 >= array[i + 1] - array[i])]
+
+    # def __s_wave_correction(
+    #         self,
+    #         seismogram: Seismogram,
+    #         p_der_indexes: list[int],
+    #         prediction: npt.NDArray[npt.Shape["*, 3"], npt.Float32]
+    # ) -> npt.NDArray[npt.Shape["*, 3"], npt.Float32]:
+    #
+    #     orig_trace = seismogram.get_original_interpolated()
+    #     filtered_trace = seismogram.traces
+    #     # print("Original trace shape: ", orig_trace.shape)
+    #     sos_low_filter = scipy.signal.butter(2, [0.1, 5], "bandpass", fs=Seismogram.NN_sampling_rate, output='sos')
+    #     sos_high_filter = scipy.signal.butter(2, [1, 10], "bandpass", fs=Seismogram.NN_sampling_rate, output='sos')
+    #
+    #     for i, index in enumerate(p_der_indexes):
+    #
+    #         max_windows = min(prediction.shape[0], self.MAX_WINDOWS)
+    #         if i + 1 < len(p_der_indexes) and p_der_indexes[i + 1] - p_der_indexes[i] < max_windows:
+    #             max_windows = max(0, p_der_indexes[i + 1] - p_der_indexes[i] - 2)
+    #
+    #         right_index = index + 1 + max_windows - 1
+    #         if right_index >= prediction.shape[0]:
+    #             right_index = prediction.shape[0]
+    #
+    #         for j in range(index + 1, right_index):
+    #             noise_index = index - self.WAVE_LENGTH / self.DELTA_X / 2
+    #
+    #             left_noise = max(0, int(noise_index * self.DELTA_X - self.WAVE_LENGTH / 2))
+    #             right_noise = min(orig_trace.shape[1] ,int(noise_index * self.DELTA_X + self.WAVE_LENGTH / 2))
+    #             if left_noise >= right_noise:
+    #                 continue
+    #
+    #             left_current = max(0, int(j * self.DELTA_X - self.WAVE_LENGTH / 2))
+    #             right_current = min(orig_trace.shape[1], int(j * self.DELTA_X + self.WAVE_LENGTH / 2))
+    #             if left_current >= right_current:
+    #                 continue
+    #
+    #             noise_data = orig_trace[:, left_noise : right_noise]
+    #             current_data = orig_trace[:, left_current : right_current]
+    #
+    #             noise_data_ampl = filtered_trace[:, left_noise: right_noise]
+    #             current_data_ampl = filtered_trace[:, left_current: right_current]
+    #
+    #             amplitude_noise = self.__RMS3(noise_data_ampl)
+    #             amplitude_current = self.__RMS3(current_data_ampl)
+    #             relative_amplitude = amplitude_current / amplitude_noise
+    #
+    #             low_noise = self.__RMS3(scipy.signal.sosfilt(sos_low_filter, noise_data))
+    #             high_noise = self.__RMS3(scipy.signal.sosfilt(sos_high_filter, noise_data))
+    #             energy_noise = low_noise / (high_noise + self.EPS)
+    #
+    #             low_current = self.__RMS3(scipy.signal.sosfilt(sos_low_filter, current_data))
+    #             high_current = self.__RMS3(scipy.signal.sosfilt(sos_high_filter, current_data))
+    #             energy_current = low_current / (high_current + self.EPS)
+    #
+    #             relative_energy = energy_current / energy_noise
+    #
+    #             # multiplying_amplitude = 1
+    #             # if relative_amplitude >= 1.5:
+    #             #     multiplying_amplitude = 1.2
+    #             # elif relative_amplitude >= 3:
+    #             #     multiplying_amplitude = 1.5
+    #
+    #             multiplying_amplitude = 1 + 0.5 / (1 + np.exp(-2 * (relative_amplitude - 1.5)))
+    #
+    #             # multiplying_energy = 1
+    #             # if relative_energy >= 2:
+    #             #     multiplying_energy = 1.2
+    #
+    #             multiplying_energy = 1 + 0.2 / (1 + np.exp(-2 * (relative_energy - 2)))
+    #
+    #             coeff = multiplying_amplitude * multiplying_energy
+    #             print(f"mul ampl {multiplying_amplitude} \n"
+    #                   f"mul en {multiplying_energy} \n"
+    #                   f"for i - {i} ({index * self.DELTA_X}) and j - {j}")
+    #
+    #             prediction[j, 1] *= coeff
+    #
+    #     return prediction
+    #
+    # def __RMS3(self, window: npt.NDArray[npt.Shape["3, *"], npt.Float32]) -> float:
+    #     rms_value_n = np.sqrt(np.mean(np.square(window[0])))
+    #     rms_value_e = np.sqrt(np.mean(np.square(window[1])))
+    #     rms_value_z = np.sqrt(np.mean(np.square(window[2])))
+    #     return (rms_value_n + rms_value_e + rms_value_z) / 3.0
 
     def __horizontal_2D_sliding_window(self, array, sliding_window_size, dx=40):
         shape = array.shape[:-2] + ((array.shape[-1] - sliding_window_size[-1]) // dx + 1,) + sliding_window_size

@@ -26,6 +26,15 @@ class Seismogram:
                  self.original_traces[1].copy().interpolate(sampling_rate=Seismogram.NN_sampling_rate),
                  self.original_traces[2].copy().interpolate(sampling_rate=Seismogram.NN_sampling_rate)])
 
+    def get_original_interpolated(self):
+        if self.sampling_rate == Seismogram.NN_sampling_rate:
+            return np.array(self.original_traces)
+        else:
+            return np.array(
+                [self.original_traces[0].copy().interpolate(sampling_rate=Seismogram.NN_sampling_rate),
+                 self.original_traces[1].copy().interpolate(sampling_rate=Seismogram.NN_sampling_rate),
+                 self.original_traces[2].copy().interpolate(sampling_rate=Seismogram.NN_sampling_rate)])
+
     def reset_trace(self):
         self.traces = self.__interpolate_traces()
 
