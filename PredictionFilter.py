@@ -86,9 +86,9 @@ class PredictionFilter:
                 multiplying_energy = 1 + 0.2 / (1 + np.exp(-2 * (relative_energy - 2)))
 
                 coeff = multiplying_amplitude * multiplying_energy
-                print(f"mul ampl {multiplying_amplitude} \n"
-                      f"mul en {multiplying_energy} \n"
-                      f"for i - {i} ({index * PredictionFilter.DELTA_X}) and j - {j}")
+                # print(f"mul ampl {multiplying_amplitude} \n"
+                #       f"mul en {multiplying_energy} \n"
+                #       f"for i - {i} ({index * PredictionFilter.DELTA_X}) and j - {j}")
 
                 copy_prediction[j, 1] *= coeff
 

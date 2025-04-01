@@ -46,6 +46,9 @@ def extract_energy_in_band(cwt_coeffs, frequencies, freq_range=(1, 5)):
 
     return energy
 
+xlist = [(1, 1.1), (2, 1.2), (3, 1.3)]
+xlist = np.array(xlist)
+print(xlist.shape)
 
 # Example usage
 sampling_rate = 100  # Hz
