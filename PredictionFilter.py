@@ -92,6 +92,28 @@ class PredictionFilter:
 
                 copy_prediction[j, 1] *= coeff
 
+        for i, index in enumerate(p_der_indexes):
+            if i == 0:
+                for j in range(0, index + 1):
+                    copy_prediction[j, 1] *= 0
+                continue
+
+            if i == len(p_der_indexes) - 1 and prediction.shape[0] - index > PredictionFilter.MAX_WINDOWS * 2:
+                for j in range(index + PredictionFilter.MAX_WINDOWS * 2, prediction.shape[0]):
+                    corrected_val = (j - (index + PredictionFilter.MAX_WINDOWS * 2)) / float(
+                        PredictionFilter.MAX_WINDOWS)
+                    copy_prediction[j, 1] *= (1 - 1 / (1 + np.exp(-10 * (corrected_val - 0.6))))
+
+
+            diff_p_size = index - p_der_indexes[i - 1]
+            if diff_p_size < PredictionFilter.MAX_WINDOWS * 2:
+                continue
+
+            for j in range(p_der_indexes[i - 1] + PredictionFilter.MAX_WINDOWS * 2, index + 1):
+                corrected_val = (j - (p_der_indexes[i - 1] + PredictionFilter.MAX_WINDOWS * 2)) / float(PredictionFilter.MAX_WINDOWS)
+                copy_prediction[j, 1] *= (1 - 1 / (1 + np.exp(-10 * (corrected_val - 0.6))))
+
+
         return copy_prediction
 
     @staticmethod

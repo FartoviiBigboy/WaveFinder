@@ -14,6 +14,51 @@ import matplotlib.pyplot as plt
 from PredictionFilter import PredictionFilter
 from Seismogram import Seismogram
 
+def compute_score_pre_p(args):
+    map_pred_p, map_true_p = args
+    answer = np.zeros((101, 101, 4), dtype=np.int32)
+
+    for i in range(101):
+        for j in range(101):
+            tmp_list_pred_up_p = {key for (key, value) in map_pred_p.items() if
+                                value[0] >= (float(i) / 100.0) and value[1] <= (float(j) / 100.0)}
+            tmp_list_pred_down_p = {key for (key, value) in map_pred_p.items()} - tmp_list_pred_up_p
+            tmp_list_true_p = set(map_true_p)
+            answer[i, j, 0] = len(tmp_list_pred_up_p & tmp_list_true_p)
+            answer[i, j, 1] = len(tmp_list_pred_up_p - tmp_list_true_p)
+            answer[i, j, 2] = len(tmp_list_pred_down_p & tmp_list_true_p)
+            answer[i, j, 3] = len(tmp_list_pred_down_p - tmp_list_true_p)
+    return answer
+
+def compute_score_after_s(args):
+    map_pred_p, map_true_p, map_pred_s, map_true_s, list_pred_preds, seismogram, location = args
+    answer = np.zeros((101, 101, 4), dtype=np.int32)
+
+    tmp_list_pred_up_p = {key for (key, value) in map_pred_p.items() if
+                          value[0] >= (float(location[0]) / 100.0) and value[1] <= (float(location[1]) / 100.0)}
+
+    tmp_list_pred_up_corrected = sorted([int(x / PredictionFilter.DELTA_X) for x in tmp_list_pred_up_p])
+    corrected_s_prediction = PredictionFilter.s_wave_correction(seismogram,
+                                                                tmp_list_pred_up_corrected,
+                                                                list_pred_preds)[:, 1]
+
+    for i in range(101):
+        for j in range(101):
+            tmp_list_pred_up_s = {key for (key, value) in map_pred_s.items() if
+                                  corrected_s_prediction[int(key / PredictionFilter.DELTA_X)] >=
+                                  (float(i) / 100.0) and value[1] <= (float(j) / 100.0)}
+
+            tmp_list_pred_down_s = {key for (key, value) in map_pred_s.items()} - tmp_list_pred_up_s
+            tmp_list_true_s = set(map_true_s)
+
+            answer[i, j, 0] = len(tmp_list_pred_up_s & tmp_list_true_s)
+            answer[i, j, 1] = len(tmp_list_pred_up_s - tmp_list_true_s)
+            answer[i, j, 2] = len(tmp_list_pred_down_s & tmp_list_true_s)
+            answer[i, j, 3] = len(tmp_list_pred_down_s - tmp_list_true_s)
+
+    print("exit_s")
+    return answer
+
 
 def compute_score_angled(args):
     map_pred_p, map_true_p, map_pred_s, map_true_s, list_pred_preds, seismogram = args
@@ -67,83 +112,6 @@ def compute_score_angled(args):
 
     print("exit")
     return answer
-
-
-
-def compute_score(args):
-    i, j, list_of_map_pred_p, list_of_map_true_p, list_of_map_pred_s, list_of_map_true_s, list_of_lists_pred_preds, list_of_seismograms = args
-    TP_p, FP_p, FN_p, TN_p = 0, 0, 0, 0
-    TP_s, FP_s, FN_s, TN_s = 0, 0, 0, 0
-    f1_score_p, g_mean_p, p_4_p, mcc_score_p = 0, 0, 0, 0
-    f1_score_s, g_mean_s, p_4_s, mcc_score_s = 0, 0, 0, 0
-
-    corrected_s_predictions = []
-
-    # print("enter")
-
-    for k in range(len(list_of_map_pred_p)):
-        tmp_list_pred_up = {key for (key, value) in list_of_map_pred_p[k].items() if
-                            value[0] >= (float(i) / 100.0) and value[1] <= (float(j) / 100.0)}
-
-        tmp_list_pred_up_corrected = sorted([int(x / PredictionFilter.DELTA_X) for x in tmp_list_pred_up])
-        corrected_s_prediction = PredictionFilter.s_wave_correction(list_of_seismograms[k], tmp_list_pred_up_corrected, list_of_lists_pred_preds[k])[:, 1]
-        corrected_s_predictions.append(corrected_s_prediction)
-
-        tmp_list_pred_down = {key for (key, value) in list_of_map_pred_p[k].items()} - tmp_list_pred_up
-
-        tmp_list_true = set(list_of_map_true_p[k])
-        TP_p += len(tmp_list_pred_up & tmp_list_true)
-        FP_p += len(tmp_list_pred_up - tmp_list_true)
-        FN_p += len(tmp_list_pred_down & tmp_list_true)
-        TN_p += len(tmp_list_pred_down - tmp_list_true)
-
-    print("exit")
-    for k in range(len(list_of_map_pred_s)):
-        tmp_list_pred_up = {key for (key, value) in list_of_map_pred_s[k].items() if
-                            corrected_s_predictions[k][int(key / PredictionFilter.DELTA_X)] >= (float(i) / 100.0) and value[1] <= (float(j) / 100.0)}
-
-        tmp_list_pred_down = {key for (key, value) in list_of_map_pred_s[k].items()} - tmp_list_pred_up
-
-        tmp_list_true = set(list_of_map_true_s[k])
-        TP_s += len(tmp_list_pred_up & tmp_list_true)
-        FP_s += len(tmp_list_pred_up - tmp_list_true)
-        FN_s += len(tmp_list_pred_down & tmp_list_true)
-        TN_s += len(tmp_list_pred_down - tmp_list_true)
-
-    if not ((TP_p + FP_p) == 0 or (TP_p + FN_p) == 0):
-        precision = TP_p / (TP_p + FP_p)
-        recall = TP_p / (TP_p + FN_p)
-        beta = 1
-        if not ((precision + recall) == 0):
-            f1_score_p = (1 + beta ** 2) * precision * recall / (precision * beta ** 2 + recall)
-
-    if not ((TP_p + FN_p) == 0 or (TN_p + FP_p) == 0):
-        g_mean_p = math.sqrt(TP_p / (TP_p + FN_p)) * math.sqrt(TN_p / (TN_p + FP_p))
-
-    if not ((4 * TP_p * TN_p + (TP_p + TN_p) * (FP_p + FN_p)) == 0):
-        p_4_p = 4 * TP_p * TN_p / (4 * TP_p * TN_p + (TP_p + TN_p) * (FP_p + FN_p))
-
-    if not ((TP_p + FP_p) * (TP_p + FN_p) * (TN_p + FP_p) * (TN_p + FN_p) == 0):
-        mcc_score_p = (TP_p * TN_p - FP_p * FN_p) / math.sqrt((TP_p + FP_p) * (TP_p + FN_p) * (TN_p + FP_p) * (TN_p + FN_p))
-
-    if not ((TP_s + FP_s) == 0 or (TP_s + FN_s) == 0):
-        precision = TP_s / (TP_s + FP_s)
-        recall = TP_s / (TP_s + FN_s)
-        beta = 1
-        if not ((precision + recall) == 0):
-            f1_score_s = (1 + beta ** 2) * precision * recall / (precision * beta ** 2 + recall)
-
-    if not ((TP_s + FN_s) == 0 or (TN_s + FP_s) == 0):
-        g_mean_s = math.sqrt(TP_s / (TP_s + FN_s)) * math.sqrt(TN_s / (TN_s + FP_s))
-
-    if not ((4 * TP_s * TN_s + (TP_s + TN_s) * (FP_s + FN_s)) == 0):
-        p_4_s = 4 * TP_s * TN_s / (4 * TP_s * TN_s + (TP_s + TN_s) * (FP_s + FN_s))
-
-    if not ((TP_s + FP_s) * (TP_s + FN_s) * (TN_s + FP_s) * (TN_s + FN_s) == 0):
-        mcc_score_s = (TP_s * TN_s - FP_s * FN_s) / math.sqrt((TP_s + FP_s) * (TP_s + FN_s) * (TN_s + FP_s) * (TN_s + FN_s))
-
-    return (i, j, f1_score_p, g_mean_p, p_4_p, mcc_score_p, f1_score_s, g_mean_s, p_4_s, mcc_score_s)
-
 
 def get_matrix(dir_name: str):
     tmp_dir = dir_name if dir_name[-1] == '\\' else dir_name + '\\'
@@ -216,39 +184,90 @@ def get_matrix(dir_name: str):
         list_of_map_pred_s.append(tmp_map_pred_s)
         list_of_lists_pred_preds.append(np.array(tmp_list_pred_preds))
 
-    args_list = list(zip(list_of_map_pred_p, list_of_map_true_p, list_of_map_pred_s, list_of_map_true_s, list_of_lists_pred_preds, list_of_seismograms))
-
+    args_list_pre_p = list(zip(list_of_map_pred_p, list_of_map_true_p))
     with ProcessPoolExecutor(os.cpu_count()) as executor:
-        results = executor.map(compute_score_angled, args_list)
+        results_pre_p = executor.map(compute_score_pre_p, args_list_pre_p)
 
-    results = np.array(list(results))
-    print(results.shape)
-    results = results.sum(axis=0)
-    print(results.shape)
+    results_pre_p = np.array(list(results_pre_p))
+    results_pre_p = results_pre_p.sum(axis=0)
 
     mcc_score_p = np.zeros((101, 101))
+    for i in range(101):
+        for j in range(101):
+            if not (int(results_pre_p[i, j, 0] + results_pre_p[i, j, 1])
+                    * int(results_pre_p[i, j, 0] + results_pre_p[i, j, 2])
+                    * int(results_pre_p[i, j, 3] + results_pre_p[i, j, 1])
+                    * int(results_pre_p[i, j, 3] + results_pre_p[i, j, 2]) == 0):
+                mcc_score_p[i, j] = ((int(results_pre_p[i, j, 0]) * int(results_pre_p[i, j, 3])
+                                     - int(results_pre_p[i, j, 1]) * int(results_pre_p[i, j, 2]))
+                                     / math.sqrt(
+                            int(results_pre_p[i, j, 0] + results_pre_p[i, j, 1])
+                            * int(results_pre_p[i, j, 0] + results_pre_p[i, j, 2])
+                            * int(results_pre_p[i, j, 3] + results_pre_p[i, j, 1])
+                            * int(results_pre_p[i, j, 3] + results_pre_p[i, j, 2])))
+
+    max_elem = np.where(mcc_score_p == mcc_score_p.max())
+    max_elem = (max(max_elem[0]), min(max_elem[1]))
+    print(max_elem)
+    duplicated_max_elem = [max_elem] * len(list_of_map_pred_p)
+
+    args_list_after_s =  list(zip(list_of_map_pred_p, list_of_map_true_p, list_of_map_pred_s, list_of_map_true_s, list_of_lists_pred_preds, list_of_seismograms, duplicated_max_elem))
+
+    with ProcessPoolExecutor(os.cpu_count()) as executor:
+        results_after_s = executor.map(compute_score_after_s, args_list_after_s)
+
+    results_after_s = np.array(list(results_after_s))
+    print(results_after_s.shape)
+    results_after_s = results_after_s.sum(axis=0)
+
     mcc_score_s = np.zeros((101, 101))
     for i in range(101):
         for j in range(101):
-            if not (int(results[i, j, 0, 0] + results[i, j, 0, 1])
-                    * int(results[i, j, 0, 0] + results[i, j, 0, 2])
-                    * int(results[i, j, 0, 3] + results[i, j, 0, 1])
-                    * int(results[i, j, 0, 3] + results[i, j, 0, 2]) == 0):
-                mcc_score_p[i, j] = ((int(results[i, j, 0, 0]) * int(results[i, j, 0, 3])
-                                     - int(results[i, j, 0, 1]) * int(results[i, j, 0, 2]))
+            if not (int(results_after_s[i, j, 0] + results_after_s[i, j, 1])
+                    * int(results_after_s[i, j, 0] + results_after_s[i, j, 2])
+                    * int(results_after_s[i, j, 3] + results_after_s[i, j, 1])
+                    * int(results_after_s[i, j, 3] + results_after_s[i, j, 2]) == 0):
+                mcc_score_s[i, j] = ((int(results_after_s[i, j, 0]) * int(results_after_s[i, j, 3])
+                                      - int(results_after_s[i, j, 1]) * int(results_after_s[i, j, 2]))
                                      / math.sqrt(
-                            int(results[i, j, 0, 0] + results[i, j, 0, 1])
-                            * int(results[i, j, 0, 0] + results[i, j, 0, 2])
-                            * int(results[i, j, 0, 3] + results[i, j, 0, 1])
-                            * int(results[i, j, 0, 3] + results[i, j, 0, 2])))
+                            int(results_after_s[i, j, 0] + results_after_s[i, j, 1])
+                            * int(results_after_s[i, j, 0] + results_after_s[i, j, 2])
+                            * int(results_after_s[i, j, 3] + results_after_s[i, j, 1])
+                            * int(results_after_s[i, j, 3] + results_after_s[i, j, 2])))
 
-            if not (int(results[i, j, 1, 0] + results[i, j, 1, 1]) * int(results[i, j, 1, 0] + results[i, j, 1, 2]) * int(
-                    results[i, j, 1, 3] + results[i, j, 1, 1]) * int(results[i, j, 1, 3] + results[i, j, 1, 2]) == 0):
-                mcc_score_s[i, j] = (int(results[i, j, 1, 0]) * int(results[i, j, 1, 3]) - int(results[i, j, 1, 1]) * int(results[
-                    i, j, 1, 2])) / math.sqrt(
-                    int(results[i, j, 1, 0] + results[i, j, 1, 1]) * int(results[i, j, 1, 0] + results[i, j, 1, 2]) * int(
-                                results[i, j, 1, 3] + results[i, j, 1, 1]) * int(
-                                results[i, j, 1, 3] + results[i, j, 1, 2]))
+    # args_list = list(zip(list_of_map_pred_p, list_of_map_true_p, list_of_map_pred_s, list_of_map_true_s, list_of_lists_pred_preds, list_of_seismograms))
+    #
+    # with ProcessPoolExecutor(os.cpu_count()) as executor:
+    #     results = executor.map(compute_score_angled, args_list)
+    #
+    # results = np.array(list(results))
+    # print(results.shape)
+    # results = results.sum(axis=0)
+    # print(results.shape)
+    #
+    # mcc_score_p = np.zeros((101, 101))
+    # mcc_score_s = np.zeros((101, 101))
+    # for i in range(101):
+    #     for j in range(101):
+    #         if not (int(results[i, j, 0, 0] + results[i, j, 0, 1])
+    #                 * int(results[i, j, 0, 0] + results[i, j, 0, 2])
+    #                 * int(results[i, j, 0, 3] + results[i, j, 0, 1])
+    #                 * int(results[i, j, 0, 3] + results[i, j, 0, 2]) == 0):
+    #             mcc_score_p[i, j] = ((int(results[i, j, 0, 0]) * int(results[i, j, 0, 3])
+    #                                  - int(results[i, j, 0, 1]) * int(results[i, j, 0, 2]))
+    #                                  / math.sqrt(
+    #                         int(results[i, j, 0, 0] + results[i, j, 0, 1])
+    #                         * int(results[i, j, 0, 0] + results[i, j, 0, 2])
+    #                         * int(results[i, j, 0, 3] + results[i, j, 0, 1])
+    #                         * int(results[i, j, 0, 3] + results[i, j, 0, 2])))
+    #
+    #         if not (int(results[i, j, 1, 0] + results[i, j, 1, 1]) * int(results[i, j, 1, 0] + results[i, j, 1, 2]) * int(
+    #                 results[i, j, 1, 3] + results[i, j, 1, 1]) * int(results[i, j, 1, 3] + results[i, j, 1, 2]) == 0):
+    #             mcc_score_s[i, j] = (int(results[i, j, 1, 0]) * int(results[i, j, 1, 3]) - int(results[i, j, 1, 1]) * int(results[
+    #                 i, j, 1, 2])) / math.sqrt(
+    #                 int(results[i, j, 1, 0] + results[i, j, 1, 1]) * int(results[i, j, 1, 0] + results[i, j, 1, 2]) * int(
+    #                             results[i, j, 1, 3] + results[i, j, 1, 1]) * int(
+    #                             results[i, j, 1, 3] + results[i, j, 1, 2]))
 
     # args_list_p = [(i, j, list_of_map_pred_p, list_of_map_true_p, list_of_map_pred_s, list_of_map_true_s, list_of_lists_pred_preds, list_of_seismograms) for i in range(101) for j in range(101)]
     # # args_list_s = [(i, j, list_of_map_pred_s, list_of_map_true_s) for i in range(101) for j in range(101)]
