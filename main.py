@@ -3,6 +3,7 @@ import sys
 
 import obspy
 import PyQt6
+from PIL.ImageFile import ImageFile
 from PyQt6 import QtWidgets
 from PyQt6.QtCore import pyqtSlot
 from PyQt6.QtWidgets import QMessageBox
@@ -10,10 +11,12 @@ from PyQt6.QtWidgets import QAbstractItemView
 from PyQt6.QtWidgets import QFileDialog
 from PyQt6.QtWidgets import QDialog
 from PyQt6.QtWidgets import QListWidgetItem
+from PyQt6.QtWidgets import QWidget
 from PIL import Image
 from PIL import ImageQt
 import pyqtgraph
 import pyqtgraph.exporters
+from collections.abc import Callable
 
 from ChkBxFileDialog import ChkBxFileDialog
 from TraceWidget import TraceWidget
@@ -26,10 +29,10 @@ from NeuralNetworkModel import NeuralNetworkModel
 
 class MainWindow(QtWidgets.QWidget):
 
-    def __init__(self, model, parent=None):
+    def __init__(self, model: NeuralNetworkModel, parent=None) -> None:
         QtWidgets.QWidget.__init__(self, parent)
 
-        self.ui = Ui_MainForm()
+        self.ui: Ui_MainForm = Ui_MainForm()
         self.ui.setupUi(self)
         self.ui.load_seismogram_btn.clicked.connect(self.add_seismograms)
         self.ui.temp_btn.clicked.connect(self.clear_seismogram_list)
@@ -46,17 +49,17 @@ class MainWindow(QtWidgets.QWidget):
 
         self.ui.progress_bar.setVisible(False)
 
-        self.file_formats = {
+        self.file_formats: dict[str, Callable] = {
             "PNG (*.png)": self.save_as_png,
             "PKS (*.pks)": self.save_as_pks,
             "RAW (*.raw)": self.save_raw
         }
 
         self.trace_widgets_list: list[TraceWidget] = []
-        self.model = model
+        self.model: NeuralNetworkModel = model
 
     @pyqtSlot()
-    def select_all(self):
+    def select_all(self) -> None:
         for trace in self.trace_widgets_list:
             if self.ui.for_all_chkbox.isChecked():
                 trace.ui.apply_operation_chkbox.setChecked(True)
@@ -64,7 +67,7 @@ class MainWindow(QtWidgets.QWidget):
                 trace.ui.apply_operation_chkbox.setChecked(False)
 
     @pyqtSlot()
-    def apply_NN(self):
+    def apply_NN(self) -> None:
         for trace in self.trace_widgets_list:
             if trace.ui.apply_operation_chkbox.isChecked():
                 prediction, p_der_indexes, s_der_indexes = self.model.get_prediction(trace.seismogram,
@@ -73,7 +76,7 @@ class MainWindow(QtWidgets.QWidget):
                 trace.enable_sliders()
 
     @pyqtSlot()
-    def reset_seismograms(self):
+    def reset_seismograms(self) -> None:
         for trace in self.trace_widgets_list:
             if trace.ui.apply_operation_chkbox.isChecked():
                 trace.seismogram.reset_trace()
@@ -82,7 +85,7 @@ class MainWindow(QtWidgets.QWidget):
                 trace.reset_sliders()
 
     @pyqtSlot()
-    def invert_selection(self):
+    def invert_selection(self) -> None:
         for trace in self.trace_widgets_list:
             if trace.ui.apply_operation_chkbox.isChecked():
                 trace.ui.apply_operation_chkbox.setChecked(False)
@@ -90,15 +93,16 @@ class MainWindow(QtWidgets.QWidget):
                 trace.ui.apply_operation_chkbox.setChecked(True)
 
     @pyqtSlot()
-    def apply_filter(self):
-        dlg = FilterDialog(self)
+    def apply_filter(self) -> None:
+        dlg: FilterDialog = FilterDialog(self)
         if dlg.exec():
-            order = int(dlg.ui.filter_order_edit.text())
-            filter_type = dlg.filter_type
+            order: int = int(dlg.ui.filter_order_edit.text())
+            filter_type: str = dlg.filter_type
             if filter_type in ["bandpass", "bandstop"]:
-                frequency = [float(dlg.ui.frequency_low_edit.text()), float(dlg.ui.frequency_high_edit.text())]
+                frequency: list[float] = [float(dlg.ui.frequency_low_edit.text()),
+                                          float(dlg.ui.frequency_high_edit.text())]
             else:
-                frequency = float(dlg.ui.frequency_low_edit.text())
+                frequency: float = float(dlg.ui.frequency_low_edit.text())
             for trace in self.trace_widgets_list:
                 if trace.ui.apply_operation_chkbox.isChecked():
                     try:
@@ -110,14 +114,15 @@ class MainWindow(QtWidgets.QWidget):
                         break
 
     @pyqtSlot()
-    def add_seismograms(self):
+    def add_seismograms(self) -> None:
+        file_paths: list[str]
         file_paths, _ = QFileDialog.getOpenFileNames(self, 'Открыть файл(ы) сейсмограмм(ы)', '',
                                                      'MSEED files (*.mseed);;All Files (*)')
-        traces = []
+        traces: list[Seismogram] = []
         if file_paths:
             for file in file_paths:
                 try:
-                    sts = self.sort_stations(obspy.read(file))
+                    sts: list[obspy.Trace] = self.sort_stations(obspy.read(file))
                     traces.extend([Seismogram(sts[i:i + 3], file)
                                    for i in range(0, len(sts), 3)])
                 except Exception:
@@ -128,8 +133,8 @@ class MainWindow(QtWidgets.QWidget):
                     )
 
         for trace in traces:
-            wdt = TraceWidget(trace)
-            my_item = QListWidgetItem(self.ui.seismogram_list)
+            wdt: TraceWidget = TraceWidget(trace)
+            my_item: QListWidgetItem = QListWidgetItem(self.ui.seismogram_list)
             my_item.setSizeHint(wdt.size())
             self.trace_widgets_list.append(wdt)
             self.ui.seismogram_list.addItem(my_item)
@@ -138,9 +143,9 @@ class MainWindow(QtWidgets.QWidget):
         traces.clear()
 
     @pyqtSlot()
-    def save_seismograms(self):
-        files_types = "PNG (*.png);;PKS (*.pks);; RAW (*.raw)"
-        dialog = ChkBxFileDialog(chkBxTitle="Сохранить как последовательность", filter=files_types)
+    def save_seismograms(self) -> None:
+        files_types: str = "PNG (*.png);;PKS (*.pks);; RAW (*.raw)"
+        dialog: ChkBxFileDialog = ChkBxFileDialog(chkBxTitle="Сохранить как последовательность", filter=files_types)
 
         for i in range(len(self.trace_widgets_list)):
             if self.trace_widgets_list[i].ui.apply_operation_chkbox.isChecked() and \
@@ -152,47 +157,50 @@ class MainWindow(QtWidgets.QWidget):
                 else:
                     self.file_formats[dialog.selectedNameFilter()](self.trace_widgets_list[i], dialog, False)
 
-    def save_raw(self, trace, dlg, is_long_name):
+    def save_raw(self, trace: TraceWidget, dlg: ChkBxFileDialog, is_long_name: bool) -> None:
         if trace.ui.apply_operation_chkbox.isChecked():
-            file_path = f"{self.get_file_path(trace, dlg, is_long_name)}.raw"
-            raw_data = trace.get_raw()
+            file_path: str = f"{self.get_file_path(trace, dlg, is_long_name)}.raw"
+            raw_data: list[str] = trace.get_raw()
             with open(file_path, 'w') as file:
                 for item in raw_data:
                     file.write(item + '\n')
 
-    def save_as_pks(self, trace, dlg, is_long_name):
+    def save_as_pks(self, trace: TraceWidget, dlg: ChkBxFileDialog, is_long_name: bool) -> None:
         if trace.ui.apply_operation_chkbox.isChecked():
-            file_path = f"{self.get_file_path(trace, dlg, is_long_name)}.pks"
-            log_file = trace.get_lines_as_pks()
+            file_path: str = f"{self.get_file_path(trace, dlg, is_long_name)}.pks"
+            log_file: list[str] = trace.get_lines_as_pks()
             with open(file_path, 'w') as file:
                 for item in log_file:
                     file.write(item + '\n')
 
-    def save_as_png(self, trace, dlg, is_long_name):
+    def save_as_png(self, trace: TraceWidget, dlg: ChkBxFileDialog, is_long_name: bool) -> None:
         if trace.ui.apply_operation_chkbox.isChecked():
-            file_path = f"{self.get_file_path(trace, dlg, is_long_name)}.png"
-            image = self.get_complex_image(trace)
+            file_path: str = f"{self.get_file_path(trace, dlg, is_long_name)}.png"
+            image: Image.Image = self.get_complex_image(trace)
             image.save(file_path)
 
     # TODO
     # file_path = f"{dlg.selectedUrls()[0].toLocalFile()}_{os.path.basename(trace.seismogram.file_path).split('.')[0]}"
-    def get_file_path(self, trace, dlg, is_long_name):
+    def get_file_path(self, trace: TraceWidget, dlg: ChkBxFileDialog, is_long_name: bool) -> str:
         if is_long_name:
             file_path = f"{dlg.selectedUrls()[0].toLocalFile()}_{os.path.basename(trace.seismogram.file_path)}_{trace.seismogram.station_name}"
         else:
             file_path = f"{dlg.selectedUrls()[0].toLocalFile()}"
         return file_path
 
-    def get_complex_image(self, trace):
-        images = [ImageQt.fromqimage(pyqtgraph.exporters.ImageExporter(x).export(toBytes=True))
-                  for x in [trace.ui.N_trace.scene(), trace.ui.E_trace.scene(), trace.ui.Z_trace.scene()]]
+    def get_complex_image(self, trace: TraceWidget) -> Image:
+        images: list[ImageFile] = [ImageQt.fromqimage(pyqtgraph.exporters.ImageExporter(x).export(toBytes=True))
+                                   for x in
+                                   [trace.ui.N_trace.scene(), trace.ui.E_trace.scene(), trace.ui.Z_trace.scene()]]
+        widths: list[int]
+        heights: list[int]
         widths, heights = zip(*(i.size for i in images))
-        max_width = max(widths)
-        total_height = sum(heights)
+        max_width: int = max(widths)
+        total_height: int = sum(heights)
 
-        new_im = Image.new('RGB', (max_width, total_height))
+        new_im: Image = Image.new('RGB', (max_width, total_height))
 
-        y_offset = 0
+        y_offset: int = 0
         for im in images:
             new_im.paste(im, (0, y_offset))
             y_offset += im.size[1]
@@ -210,29 +218,29 @@ class MainWindow(QtWidgets.QWidget):
     #     tr_wdt.object_to_types[SVerticalTriadeLine]["noise"].setValue(fourth_value)
 
     @pyqtSlot()
-    def clear_seismogram_list(self):
+    def clear_seismogram_list(self) -> None:
         self.ui.seismogram_list.clear()
         self.trace_widgets_list.clear()
 
-    def keyPressEvent(self, event):
+    def keyPressEvent(self, event) -> None:
         if event.key() == PyQt6.QtCore.Qt.Key.Key_Delete and len(self.ui.seismogram_list.selectedItems()) > 0:
-            list_items = self.ui.seismogram_list.selectedItems()
+            list_items: list[QListWidgetItem] = self.ui.seismogram_list.selectedItems()
             for item in list_items:
-                widget = self.ui.seismogram_list.itemWidget(item)
+                widget: TraceWidget = self.ui.seismogram_list.itemWidget(item)
                 self.trace_widgets_list.remove(widget)
                 self.ui.seismogram_list.takeItem(self.ui.seismogram_list.row(item))
         event.accept()
 
-    def sort_stations(self, st):
-        sorted_list = sorted(st, key=lambda x: (x.stats.station, x.stats.channel))
+    def sort_stations(self, st: obspy.Stream) -> list[obspy.Trace]:
+        sorted_list: list[obspy.Trace] = sorted(st, key=lambda x: (x.stats.station, x.stats.channel))
         sorted_list[::3], sorted_list[1::3] = sorted_list[1::3], sorted_list[::3]
         return sorted_list
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    network_model = NeuralNetworkModel()
-    app = QtWidgets.QApplication(sys.argv)
-    window = MainWindow(network_model)
+    network_model: NeuralNetworkModel = NeuralNetworkModel()
+    app: QtWidgets.QApplication = QtWidgets.QApplication(sys.argv)
+    window: MainWindow = MainWindow(network_model)
     window.show()
     app.exec()

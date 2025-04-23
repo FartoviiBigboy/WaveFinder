@@ -4,7 +4,7 @@ from pyqtgraph import ViewBox
 
 class CustomViewBox(ViewBox):
 
-    def mouseDragEvent(self, ev, axis=None):
+    def mouseDragEvent(self, ev, axis=None) -> None:
         if ev.button() == Qt.MouseButton.LeftButton:
             ev.ignore()
         else:

@@ -2,7 +2,7 @@ from PyQt6 import QtWidgets
 
 
 class ChkBxFileDialog(QtWidgets.QFileDialog):
-    def __init__(self, chkBxTitle="", filter="*.txt"):
+    def __init__(self, chkBxTitle="", filter="*.txt") -> None:
         super().__init__(caption="Сохранить как", filter=filter)
         self.setSupportedSchemes(["file"])
         self.setOption(QtWidgets.QFileDialog.Option.DontUseNativeDialog)

@@ -18,7 +18,7 @@ class MaxABSScaler(keras.layers.Layer):
     Rescale to [-1,1]
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(MaxABSScaler, self).__init__()
 
     def call(self, inputs):
@@ -37,29 +37,40 @@ class NeuralNetworkModel:
     EPS: float = 0.000001
     MAX_WINDOWS: int = 50
 
-    def __init__(self):
-        self.device_for_calculation = "/GPU:0" if (len(tf.config.list_physical_devices('GPU')) > 0) else "/device:CPU:0"
+    def __init__(self) -> None:
+        self.device_for_calculation: str = "/GPU:0" if (
+                len(tf.config.list_physical_devices('GPU')) > 0) else "/device:CPU:0"
         print(self.device_for_calculation)
-        self.model = self.__initialize_model()
+        self.model: tf.keras.models.Model = self.__initialize_model()
         self.__load_model_weights()
 
-    def __load_model_weights(self):
+    def __load_model_weights(self) -> None:
         self.model.load_weights("resources/mymodel_3_15.h5")
 
-    def get_prediction(self, seismogram: Seismogram, progress_bar: QProgressBar) -> tuple[npt.NDArray[npt.Shape["*, 3"], npt.Float32], list[int], list[int]]:
-        traces_copy = np.array(
+    def get_prediction(self, seismogram: Seismogram, progress_bar: QProgressBar) -> tuple[
+        npt.NDArray[npt.Shape["*, 3"], npt.Float32], list[int], list[int]
+    ]:
+        traces_copy: npt.NDArray[npt.Shape["3, *"], npt.Float32] = np.array(
             [
-                np.concatenate((np.zeros(int(self.WAVE_LENGTH / 2)), seismogram.traces[0], np.zeros(int(self.WAVE_LENGTH / 2)))),
-                np.concatenate((np.zeros(int(self.WAVE_LENGTH / 2)), seismogram.traces[1], np.zeros(int(self.WAVE_LENGTH / 2)))),
-                np.concatenate((np.zeros(int(self.WAVE_LENGTH / 2)), seismogram.traces[2], np.zeros(int(self.WAVE_LENGTH / 2)))),
+                np.concatenate(
+                    (np.zeros(int(self.WAVE_LENGTH / 2)), seismogram.traces[0], np.zeros(int(self.WAVE_LENGTH / 2)))),
+                np.concatenate(
+                    (np.zeros(int(self.WAVE_LENGTH / 2)), seismogram.traces[1], np.zeros(int(self.WAVE_LENGTH / 2)))),
+                np.concatenate(
+                    (np.zeros(int(self.WAVE_LENGTH / 2)), seismogram.traces[2], np.zeros(int(self.WAVE_LENGTH / 2)))),
             ]
         )
-        converted_traces = self.__horizontal_2D_sliding_window(
+        converted_traces: npt.NDArray[
+            npt.Shape["*, 3, 400"], npt.Float32
+        ] = self.__horizontal_2D_sliding_window(
             traces_copy,
             (self.NUMBER_OF_TRACES, self.WAVE_LENGTH),
-            self.DELTA_X)
-        converted_traces = np.transpose(converted_traces, (0, 2, 1))
-        callbacks = CustomCallback(progress_bar, converted_traces.shape[0])
+            self.DELTA_X
+        )
+        converted_traces: npt.NDArray[
+            npt.Shape["*, 400, 3"], npt.Float32
+        ] = np.transpose(converted_traces, (0, 2, 1))
+        callbacks: CustomCallback = CustomCallback(progress_bar, converted_traces.shape[0])
 
         predicted: npt.NDArray[npt.Shape["*, 3"], npt.Float32] = self.model.predict(
             converted_traces[:],
@@ -68,11 +79,12 @@ class NeuralNetworkModel:
             verbose=0
         )
         print(predicted.shape)
-        if not isinstance(predicted, npt.NDArray[npt.Shape["*, 3"], npt.Float32]): # Error is OK, pycharm analysis error
+        if not isinstance(predicted,
+                          npt.NDArray[npt.Shape["*, 3"], npt.Float32]):  # Error is OK, pycharm analysis error
             raise TypeError("predicted is not a NDArray(-1, 3)")
 
-        p_der_indexes = self.__get_maximums(predicted[:, 0])
-        s_der_indexes = self.__get_maximums(predicted[:, 1])
+        p_der_indexes: list[int] = self.__get_maximums(predicted[:, 0])
+        s_der_indexes: list[int] = self.__get_maximums(predicted[:, 1])
 
         # predicted = self.__s_wave_correction(seismogram, p_der_indexes, predicted)
 
@@ -80,8 +92,8 @@ class NeuralNetworkModel:
 
     def __initialize_model(self) -> tf.keras.models.Model:
         with tf.device(self.device_for_calculation):
-            output_size = 3
-            input_size = (400, 3)
+            output_size: int = 3
+            input_size: tuple[int, int] = (400, 3)
 
             input_layer = tf.keras.layers.Input(shape=input_size)
             x = STFT(n_fft=64,
@@ -118,11 +130,11 @@ class NeuralNetworkModel:
             x = tf.keras.layers.Dropout(0.5)(x)
             x = tf.keras.layers.Dense(output_size, activation="softmax", kernel_initializer='he_normal')(x)
 
-            model = tf.keras.models.Model(inputs=input_layer, outputs=x, name='custom_Resnet34')
+            model: tf.keras.models.Model = tf.keras.models.Model(inputs=input_layer, outputs=x, name='custom_Resnet34')
 
-            fLoss = keras.losses.SparseCategoricalCrossentropy()
-            fOptimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
-            fMetric = [keras.metrics.SparseCategoricalAccuracy()]
+            fLoss: keras.losses.SparseCategoricalCrossentropy = keras.losses.SparseCategoricalCrossentropy()
+            fOptimizer: keras.optimizers.Adam = tf.keras.optimizers.Adam(learning_rate=0.0001)
+            fMetric: list[keras.metrics.SparseCategoricalAccuracy] = [keras.metrics.SparseCategoricalAccuracy()]
 
             model.compile(
                 loss=fLoss,
@@ -174,7 +186,7 @@ class NeuralNetworkModel:
     #             for i in range(1, len(array) - 1)
     #             if (array[i] - array[i - 1] > array[i + 1] - array[i])]
 
-    def __get_maximums(self, array):
+    def __get_maximums(self, array) -> list[int]:
         return [i
                 for i in range(1, len(array) - 1)
                 if (array[i] - array[i - 1] > 0 >= array[i + 1] - array[i])]
@@ -264,27 +276,30 @@ class NeuralNetworkModel:
     #     rms_value_z = np.sqrt(np.mean(np.square(window[2])))
     #     return (rms_value_n + rms_value_e + rms_value_z) / 3.0
 
-    def __horizontal_2D_sliding_window(self, array, sliding_window_size, dx=40):
-        shape = array.shape[:-2] + ((array.shape[-1] - sliding_window_size[-1]) // dx + 1,) + sliding_window_size
-        strides = array.strides[:-2] + (array.strides[-1] * dx,) + array.strides[-2:]
+    def __horizontal_2D_sliding_window(self, array: npt.NDArray[npt.Shape["3, *"], npt.Float32],
+                                       sliding_window_size: tuple[int, int], dx: int = 40) -> npt.NDArray[
+        npt.Shape["*, 3, 400"], npt.Float32
+    ]:
+        shape: tuple[int, int, int] = ((array.shape[-1] - sliding_window_size[-1]) // dx + 1,) + sliding_window_size
+        strides: tuple[int, int, int] = (array.strides[-1] * dx,) + array.strides[-2:]
         return np.lib.stride_tricks.as_strided(array, shape=shape, strides=strides, writeable=False)
 
 
 class CustomCallback(keras.callbacks.Callback):
-    def __init__(self, progress_bar, overall_size):
+    def __init__(self, progress_bar: QProgressBar, overall_size: int) -> None:
         keras.callbacks.Callback.__init__(self)
-        self.progress_bar = progress_bar
-        temp_count = int(overall_size / NeuralNetworkModel.BATCH_SIZE)
-        self.count_size = temp_count if temp_count > 0 else 1
+        self.progress_bar: QProgressBar = progress_bar
+        temp_count: int = int(overall_size / NeuralNetworkModel.BATCH_SIZE)
+        self.count_size: int = temp_count if temp_count > 0 else 1
 
-    def on_predict_begin(self, logs=None):
+    def on_predict_begin(self, logs=None) -> None:
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-    def on_predict_end(self, logs=None):
+    def on_predict_end(self, logs=None) -> None:
         self.progress_bar.setValue(100)
         self.progress_bar.setVisible(False)
 
-    def on_predict_batch_end(self, batch, logs=None):
-        current_percentage = int(batch / self.count_size * 100)
+    def on_predict_batch_end(self, batch, logs=None) -> None:
+        current_percentage: int = int(batch / self.count_size * 100)
         self.progress_bar.setValue(current_percentage)
