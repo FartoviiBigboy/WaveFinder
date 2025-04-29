@@ -34,9 +34,6 @@ class NeuralNetworkModel:
     DELTA_X: int = 40
     BATCH_SIZE: int = 32
 
-    EPS: float = 0.000001
-    MAX_WINDOWS: int = 50
-
     def __init__(self) -> None:
         self.device_for_calculation: str = "/GPU:0" if (
                 len(tf.config.list_physical_devices('GPU')) > 0) else "/device:CPU:0"

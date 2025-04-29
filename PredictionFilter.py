@@ -25,8 +25,7 @@ class PredictionFilter:
         copy_prediction: npt.NDArray[npt.Shape["*, 3"], npt.Float32] = copy.deepcopy(prediction)
         orig_trace: np.ndarray = seismogram.get_original_interpolated()
         filtered_trace: np.ndarray = seismogram.traces
-        # print("Original trace shape: ", orig_trace.shape)
-        sos_low_filter: np.ndarray | Iterable | int | float = scipy.signal.butter(2, [0.1, 5], "bandpass", fs=Seismogram.NN_sampling_rate, output='sos')
+        sos_low_filter: np.ndarray | Iterable | int | float = scipy.signal.butter(2, [0.1, 1], "bandpass", fs=Seismogram.NN_sampling_rate, output='sos')
         sos_high_filter: np.ndarray | Iterable | int | float = scipy.signal.butter(2, [1, 10], "bandpass", fs=Seismogram.NN_sampling_rate, output='sos')
 
         for i, index in enumerate(p_der_indexes):
@@ -64,32 +63,19 @@ class PredictionFilter:
 
                 low_noise: float = PredictionFilter.__RMS3(scipy.signal.sosfilt(sos_low_filter, noise_data))
                 high_noise: float = PredictionFilter.__RMS3(scipy.signal.sosfilt(sos_high_filter, noise_data))
-                energy_noise: float = low_noise / (high_noise + PredictionFilter.EPS)
+                energy_noise: float = high_noise / (low_noise + PredictionFilter.EPS)
 
                 low_current: float = PredictionFilter.__RMS3(scipy.signal.sosfilt(sos_low_filter, current_data))
                 high_current: float = PredictionFilter.__RMS3(scipy.signal.sosfilt(sos_high_filter, current_data))
-                energy_current: float = low_current / (high_current + PredictionFilter.EPS)
+                energy_current: float = high_current / (low_current + PredictionFilter.EPS)
 
                 relative_energy: float = energy_current / energy_noise
 
-                # multiplying_amplitude = 1
-                # if relative_amplitude >= 1.5:
-                #     multiplying_amplitude = 1.2
-                # elif relative_amplitude >= 3:
-                #     multiplying_amplitude = 1.5
-
                 multiplying_amplitude: float = 1 + 0.5 / (1 + np.exp(-2 * (relative_amplitude - 1.5)))
-
-                # multiplying_energy = 1
-                # if relative_energy >= 2:
-                #     multiplying_energy = 1.2
 
                 multiplying_energy: float = 1 + 0.2 / (1 + np.exp(-2 * (relative_energy - 2)))
 
                 coeff: float = multiplying_amplitude * multiplying_energy
-                # print(f"mul ampl {multiplying_amplitude} \n"
-                #       f"mul en {multiplying_energy} \n"
-                #       f"for i - {i} ({index * PredictionFilter.DELTA_X}) and j - {j}")
 
                 copy_prediction[j, 1] *= coeff
 
